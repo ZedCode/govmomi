@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"reflect"
 
 	"github.com/vmware/govmomi/govc/cli"
 	"github.com/vmware/govmomi/govc/flags"
@@ -48,6 +49,10 @@ type clone struct {
 	force         bool
 	template      bool
 	customization string
+	custip        string
+	custmask      string
+	custgw        string
+	custdns       string
 	waitForIP     bool
 	annotation    string
 
@@ -99,6 +104,10 @@ func (cmd *clone) Register(ctx context.Context, f *flag.FlagSet) {
 	f.BoolVar(&cmd.force, "force", false, "Create VM if vmx already exists")
 	f.BoolVar(&cmd.template, "template", false, "Create a Template")
 	f.StringVar(&cmd.customization, "customization", "", "Customization Specification Name")
+	f.StringVar(&cmd.custip, "custip", "", "Customization IPAddress")
+	f.StringVar(&cmd.custgw, "custgw", "", "Customization Gateway")
+	f.StringVar(&cmd.custmask, "custmask", "", "Customization Netmask")
+	f.StringVar(&cmd.custdns, "custdns", "", "customize DNS Servers")
 	f.BoolVar(&cmd.waitForIP, "waitip", false, "Wait for VM to acquire IP address")
 	f.StringVar(&cmd.annotation, "annotation", "", "VM description")
 }
@@ -403,6 +412,23 @@ func (cmd *clone) cloneVM(ctx context.Context) (*object.Task, error) {
 		customSpec := customSpecItem.Spec
 		// set the customization
 		cloneSpec.Customization = &customSpec
+		
+		// Code for applying custom IP address - https://github.com/vmware/govmomi/issues/616
+		xx := customSpec.NicSettingMap[0].Adapter.Ip
+		if len(cmd.custip) > 0 {
+			aa := reflect.ValueOf(xx).Elem()
+			bb := aa.FieldByName("IpAddress")
+			bb.SetString(cmd.custip)
+		}
+		if len(cmd.custmask) > 0 {
+			customSpec.NicSettingMap[0].Adapter.SubnetMask = cmd.custmask
+		}
+		if len(cmd.custgw) > 0 {
+			customSpec.NicSettingMap[0].Adapter.Gateway[0] = cmd.custgw
+		}
+		// TODO: Add some DNS Customization here, see:
+		//       https://www.vmware.com/support/developer/vc-sdk/visdk41pubs/ApiReference/
+		
 	}
 
 	// clone virtualmachine
